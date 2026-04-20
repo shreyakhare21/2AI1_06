@@ -1,7 +1,8 @@
 fastapi
 gunicorn
+uvicorn
 pandas
 numpy
-scikit-learn
+scikit-learn==1.6.1
 jinja2
 python-multipart
