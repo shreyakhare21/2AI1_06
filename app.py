@@ -1,45 +1,46 @@
-# app.py
-from flask import Flask, render_template, request
-import pandas as pd
-from sklearn.ensemble import RandomForestClassifier
+from flask import Flask, request, render_template
+import pickle
+import numpy as np
 
 app = Flask(__name__)
 
-# Load dataset
-df = pd.read_csv('Titanic_train.csv')
-
-# Preprocessing
-df['Age'].fillna(df['Age'].mean(), inplace=True)
-df['Embarked'].fillna(df['Embarked'].mode()[0], inplace=True)
-df['Sex'] = df['Sex'].map({'male': 0, 'female': 1})
-
-X = df[['Pclass', 'Sex', 'Age', 'SibSp', 'Parch', 'Fare']]
-y = df['Survived']
-
-model = RandomForestClassifier()
-model.fit(X, y)
+# Load trained model
+model = pickle.load(open("model.pkl", "rb"))
 
 @app.route('/')
-def index():
-    return render_template('index.html')
+def home():
+    return render_template("index.html")
 
 @app.route('/predict', methods=['POST'])
 def predict():
-    data = [[
-        int(request.form['pclass']),
-        int(request.form['sex']),
-        float(request.form['age']),
-        int(request.form['sibsp']),
-        int(request.form['parch']),
-        float(request.form['fare'])
-    ]]
+    form_data = request.form.to_dict()
 
-    prediction = model.predict(data)[0]
-    result = "Survived 🎉" if prediction == 1 else "Did Not Survive ❌"
+    # 🔥 Convert Sex properly
+    sex = 0 if form_data['Sex'] == 'male' else 1
 
-    return render_template('result.html', result=result)
+    # 🔥 Convert other inputs
+    pclass = int(form_data['Pclass'])
+    age = float(form_data['Age'])
+    sibsp = int(form_data['SibSp'])
+    parch = int(form_data['Parch'])
+    fare = float(form_data['Fare'])
 
-if __name__ == '__main__':
+    # 🔥 Feature Engineering (same as training)
+    family_size = sibsp + parch
+
+    # 🔥 Missing feature (VERY IMPORTANT)
+    # Set default (since not in HTML)
+    embarked = 0  
+
+    # 🔥 Final input (8 features EXACT)
+    final_input = np.array([[pclass, sex, age, sibsp, parch, fare, family_size, embarked]])
+
+    # Prediction
+    prediction = model.predict(final_input)
+
+    result = "Survived" if prediction[0] == 1 else "Not Survived"
+
+    return render_template("result.html", prediction=result)
+
+if __name__ == "__main__":
     app.run(debug=True)
-
-
