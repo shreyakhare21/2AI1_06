@@ -1,70 +1,51 @@
-from fastapi import FastAPI, Request, Form
-from fastapi.templating import Jinja2Templates
-import numpy as np
-import pickle
+# app.py
+from flask import Flask, render_template, request
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestClassifier
 
-app = FastAPI()
+app = Flask(__name__)
 
-# Templates folder
-templates = Jinja2Templates(directory="templates")
+# Load dataset
+df = pd.read_csv('Titanic_train.csv')
 
-# Load trained model
-try:
-    with open("model.pkl", "rb") as f:
-        model = pickle.load(f)
-except Exception as e:
-    model = None
-    print("Error loading model:", e)
+# Preprocessing
+# Fill missing values
+df['Age'].fillna(df['Age'].mean(), inplace=True)
+df['Embarked'].fillna(df['Embarked'].mode()[0], inplace=True)
 
+# Convert categorical to numeric
+df['Sex'] = df['Sex'].map({'male': 0, 'female': 1})
+df = pd.get_dummies(df, columns=['Embarked'], drop_first=True)
 
-# Home route
-@app.get("/")
-def home(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+# Features & target
+X = df[['Pclass', 'Sex', 'Age', 'SibSp', 'Parch', 'Fare']]
+y = df['Survived']
 
+# Train model
+model = RandomForestClassifier()
+model.fit(X, y)
 
-# Prediction route
-@app.post("/predict_form")
-def predict_form(
-    request: Request,
-    pclass: int = Form(...),
-    sex: int = Form(...),
-    age: float = Form(...),
-    fare: float = Form(...)
-):
-    try:
-        if model is None:
-            raise Exception("Model not loaded properly")
+@app.route('/')
+def index():
+    return render_template('index.html')
 
-        # Prepare input data
-        data = np.array([[pclass, sex, age, fare]])
+@app.route('/predict', methods=['POST'])
+def predict():
+    pclass = int(request.form['pclass'])
+    sex = int(request.form['sex'])
+    age = float(request.form['age'])
+    sibsp = int(request.form['sibsp'])
+    parch = int(request.form['parch'])
+    fare = float(request.form['fare'])
 
-        # Prediction
-        prediction = model.predict(data)[0]
+    data = [[pclass, sex, age, sibsp, parch, fare]]
+    prediction = model.predict(data)[0]
 
-        # Optional probability (if model supports it)
-        try:
-            prob = model.predict_proba(data)[0][1]
-            probability_text = f" (Confidence: {prob:.2f})"
-        except:
-            probability_text = ""
+    result = "Survived" if prediction == 1 else "Did Not Survive"
+    return render_template('result.html', result=result)
 
-        # Final result
-        if prediction == 1:
-            result = f"Survived 🎉{probability_text}"
-        else:
-            result = f"Not Survived ❌{probability_text}"
-
-    except Exception as e:
-        result = f"Error: {str(e)}"
-
-    return templates.TemplateResponse("result.html", {
-        "request": request,
-        "result": result
-    })
+if __name__ == '__main__':
+    app.run(debug=True)
 
 
-# Optional: health check route (useful for deployment)
-@app.get("/health")
-def health():
-    return {"status": "OK"}
